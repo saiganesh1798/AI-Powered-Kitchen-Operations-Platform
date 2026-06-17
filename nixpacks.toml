@@ -1,0 +1,16 @@
+[phases.setup]
+nixPkgs = ['nodejs_22']
+
+[phases.install]
+cmds = [
+  'npm install -g pnpm@11.7.0',
+  'pnpm install --filter server... --ignore-scripts'
+]
+
+[phases.build]
+cmds = [
+  'cd server && pnpm build'
+]
+
+[start]
+cmd = 'cd server && node dist/index.js'
