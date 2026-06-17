@@ -3,10 +3,6 @@ packages:
   - 'client'
   - 'shared'
 
-allowBuilds:
-  '@google/genai': true
-  protobufjs: true
-
 onlyBuiltDependencies:
   - '@google/genai'
   - protobufjs

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Mic, MicOff, Terminal, ChevronRight, RotateCcw, Power } from 'lucide-react';
 import { useKitchenVoice } from '../hooks/useKitchenVoice';
-import type { Order, OrderStatus } from '../shared/types';
+import type { Order, OrderStatus } from '../../../shared/types';
 
 interface Props {
   orders: Order[];

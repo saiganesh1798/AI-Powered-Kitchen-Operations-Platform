@@ -7,7 +7,7 @@ import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { VoiceCommandConsole } from '../components/VoiceCommandConsole';
 import { AIPrepSummary } from '../components/AIPrepSummary';
-import type { StationFilter } from '../shared/types';
+import type { StationFilter } from '../../../shared/types';
 
 export const KitchenDisplay: React.FC = () => {
   const { orders, updateStatus, isConnected, inventoryAlert } = useOrders();

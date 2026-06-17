@@ -1,8 +1,0 @@
-[build]
-builder = "NIXPACKS"
-buildCommand = "npm install -g pnpm@11.7.0 && pnpm install --filter server... --ignore-scripts && cd server && pnpm build"
-
-[deploy]
-startCommand = "cd server && node dist/index.js"
-restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 3

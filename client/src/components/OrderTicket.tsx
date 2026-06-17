@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import type { Order, OrderStatus } from '../shared/types';
+import type { Order, OrderStatus } from '../../../shared/types';
 import { formatDistanceToNowStrict } from 'date-fns';
 
 interface OrderTicketProps {
