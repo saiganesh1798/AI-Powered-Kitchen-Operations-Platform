@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { socket } from '../socket';
-import { EVENTS } from '../../../shared/socket/events';
-import type { Order } from '../../../shared/types';
+import { EVENTS } from '../shared/socket/events';
+import type { Order } from '../shared/types';
 
 export function useOrders() {
   const [orders, setOrders] = useState<Order[]>([]);

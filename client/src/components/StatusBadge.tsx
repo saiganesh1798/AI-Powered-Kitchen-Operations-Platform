@@ -1,5 +1,5 @@
 import React from 'react';
-import type { OrderStatus } from '../../../shared/types';
+import type { OrderStatus } from '../shared/types';
 
 interface StatusBadgeProps {
   status: OrderStatus;
