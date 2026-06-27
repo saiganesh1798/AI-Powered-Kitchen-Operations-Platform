@@ -161,7 +161,7 @@ Serve & Archive: "serve table 5", "clear table 5", "archive table 5", "bump tabl
 
 ## 📂 Project Structure
 
-
+```
 ChefFlow-AI
 │
 ├── client/
