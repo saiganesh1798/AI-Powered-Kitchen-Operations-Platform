@@ -20,7 +20,11 @@ function parseAndExecute(
   orders: Order[],
   updateStatus: (id: string, s: OrderStatus) => void,
 ): CommandResult {
-  const t = raw.toLowerCase().replace(/[.,!?]/g, '').replace(/\s+/g, ' ').trim();
+  // 1. Basic cleaning and spacing
+  const cleaned = raw.toLowerCase().replace(/[.,!?]/g, '').replace(/\s+/g, ' ').trim();
+  
+  // 2. Convert spoken words to digits (e.g. "ready table five" -> "ready table 5")
+  const t = normalizeSpokenNumbers(cleaned);
 
   /**
    * Unified order resolver for a raw token `[X]`.
@@ -43,8 +47,9 @@ function parseAndExecute(
     });
   };
 
-  // ── "start order <X>" ────────────────────────────────────────────────────
-  const startMatch = t.match(/^(?:chef\s+)?start\s+order\s+([\w\d\s]+)$/);
+  // ── 1. START COOKING SYNONYMS ──────────────────────────────────────────────
+  // Supported: "start order 5", "start table 5", "cook table 5", "prepare table 5", "begin table 5", "start cooking 5"
+  const startMatch = t.match(/^(?:chef\s+)?(?:start\s+order|start\s+table|cook\s+table|prepare\s+table|begin\s+table|start\s+cooking)\s+([\w\d\s]+)$/);
   if (startMatch) {
     const token = startMatch[1].replace(/\s+/g, '');
     const order = resolveOrder(token, 'received');
@@ -58,8 +63,9 @@ function parseAndExecute(
     return { ok: true, message: `✓ Order …${order._id.slice(-6)} / T${order.tableNumber} → COOKING` };
   }
 
-  // ── "ready table <X>" ────────────────────────────────────────────────────
-  const readyMatch = t.match(/^(?:chef\s+)?ready\s+table\s+(?:number\s+)?(\d+)$/);
+  // ── 2. MARK READY SYNONYMS ────────────────────────────────────────────────
+  // Supported: "ready table 5", "finish table 5", "mark ready 5", "ready order 5", "completed table 5", "done table 5"
+  const readyMatch = t.match(/^(?:chef\s+)?(?:ready\s+table|finish\s+table|mark\s+ready|ready\s+order|completed\s+table|done\s+table)\s+(?:number\s+)?([\w\d]+)$/);
   if (readyMatch) {
     const token = readyMatch[1];
     const order = resolveOrder(token, 'cooking');
@@ -68,8 +74,9 @@ function parseAndExecute(
     return { ok: true, message: `✓ Table ${token} → READY` };
   }
 
-  // ── "clear table <X>" ────────────────────────────────────────────────────
-  const clearMatch = t.match(/^(?:chef\s+)?clear\s+table\s+(?:number\s+)?(\d+)$/);
+  // ── 3. SERVE & ARCHIVE SYNONYMS ────────────────────────────────────────────
+  // Supported: "clear table 5", "serve table 5", "archive table 5", "bump table 5", "clear order 5"
+  const clearMatch = t.match(/^(?:chef\s+)?(?:clear\s+table|serve\s+table|archive\s+table|bump\s+table|clear\s+order)\s+(?:number\s+)?([\w\d]+)$/);
   if (clearMatch) {
     const token = clearMatch[1];
     const order = resolveOrder(token, 'ready');
@@ -80,8 +87,21 @@ function parseAndExecute(
 
   return {
     ok: false,
-    message: `✗ Unknown command. Try: "start order <id|table>", "ready table <n>", "clear table <n>"`,
+    message: `✗ Unknown command. Try: "cook table <n>", "ready table <n>", "serve table <n>"`,
   };
+}
+
+// Spoken number normalizer maps
+const NUM_WORDS: Record<string, number> = {
+  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19,
+  twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90
+};
+
+function normalizeSpokenNumbers(text: string): string {
+  return text.split(/\s+/).map(word => {
+    return NUM_WORDS[word] !== undefined ? String(NUM_WORDS[word]) : word;
+  }).join(' ');
 }
 
 export const VoiceCommandConsole: React.FC<Props> = ({ orders, updateStatus, isConnected }) => {
@@ -95,9 +115,8 @@ export const VoiceCommandConsole: React.FC<Props> = ({ orders, updateStatus, isC
     errorMessage,
   } = useKitchenVoice();
 
-  const [inputValue, setInputValue]   = useState('');
-  const [lastResult, setLastResult]   = useState<CommandResult | null>(null);
-  const [autoSubmitMs, setAutoSubmitMs] = useState<number | null>(null); // countdown display
+  const [inputValue, setInputValue] = useState('');
+  const [lastResult, setLastResult] = useState<CommandResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Keep latest orders + updateStatus in refs so the auto-submit timer
@@ -107,47 +126,31 @@ export const VoiceCommandConsole: React.FC<Props> = ({ orders, updateStatus, isC
   useEffect(() => { ordersRef.current = orders; }, [orders]);
   useEffect(() => { updateStatusRef.current = updateStatus; }, [updateStatus]);
 
-  // ── Auto-submit when a transcript arrives ───────────────────────────────
+  // ── Auto-execute when a transcript arrives ──────────────────────────────
   useEffect(() => {
     if (!transcript) return;
 
-    // Always populate the editable field first so the chef can see / correct
     setInputValue(transcript);
     setLastResult(null);
 
     if (isActive) {
-      // Auto-submit after 700 ms — just enough to let the chef abort if needed
-      const DELAY = 700;
-      let remaining = DELAY;
-      setAutoSubmitMs(remaining);
-
-      const tick = setInterval(() => {
-        remaining -= 100;
-        setAutoSubmitMs(remaining > 0 ? remaining : null);
-      }, 100);
-
-      const submitTimer = setTimeout(() => {
-        clearInterval(tick);
-        setAutoSubmitMs(null);
-        const result = parseAndExecute(transcript, ordersRef.current, updateStatusRef.current);
-        setLastResult(result);
-        if (result.ok) {
-          setInputValue('');
-          resetTranscript();
-        }
-      }, DELAY);
-
-      return () => {
-        clearInterval(tick);
-        clearTimeout(submitTimer);
-        setAutoSubmitMs(null);
-      };
+      // Execute immediately — no countdown delay.
+      // The hook already fires only on final results or matched interim patterns,
+      // so we trust the transcript is complete enough to act on.
+      const result = parseAndExecute(transcript, ordersRef.current, updateStatusRef.current);
+      setLastResult(result);
+      if (result.ok) {
+        setInputValue('');
+        resetTranscript();
+      }
+      // If no match: leave it in the input field so the chef can correct + hit Enter
     } else {
-      // Manual mode — just focus the field for quick correction
+      // Manual mode — just focus the field
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transcript]);
+
 
   // ── Manual submit ────────────────────────────────────────────────────────
   const handleRun = useCallback(() => {
@@ -170,7 +173,6 @@ export const VoiceCommandConsole: React.FC<Props> = ({ orders, updateStatus, isC
     setInputValue('');
     resetTranscript();
     setLastResult(null);
-    setAutoSubmitMs(null);
   };
 
   const handleToggle = () => {
@@ -306,21 +308,6 @@ export const VoiceCommandConsole: React.FC<Props> = ({ orders, updateStatus, isC
           }}
         />
 
-        {/* Auto-submit countdown badge */}
-        {autoSubmitMs !== null && (
-          <span
-            style={{
-              fontSize: '0.6rem',
-              fontFamily: 'var(--font-mono)',
-              color: 'var(--status-amber)',
-              letterSpacing: '0.05em',
-              flexShrink: 0,
-              opacity: 0.85,
-            }}
-          >
-            AUTO {(autoSubmitMs / 1000).toFixed(1)}s
-          </span>
-        )}
 
         {/* Clear button */}
         {inputValue && (

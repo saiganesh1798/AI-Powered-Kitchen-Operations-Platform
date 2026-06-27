@@ -2,9 +2,10 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { OrderModel } from '../models/Order';
 import { validateTransition } from '../utils/statusGuard';
-import { getIO } from '../socket'; // Need to create a way to get io instance
+import { getIO } from '../socket';
 import { EVENTS } from '../../../shared/socket/events';
 import { sendOrderSms } from '../services/sms';
+import { depleteInventory } from '../services/inventoryDepletion';
 
 export const ordersRouter = Router();
 
@@ -94,6 +95,10 @@ ordersRouter.patch('/:id/status', async (req: Request, res: Response, next: Next
 
     const io = getIO();
     if (io && updated) {
+        // Fire-and-forget inventory depletion on received → cooking
+        if (validated.status === 'cooking' && updated.items?.length) {
+          depleteInventory(io, updated.items as any).catch(() => {});
+        }
         io.emit(EVENTS.STATUS_UPDATED, updated);
         if (validated.status === 'ready') {
             io.emit(EVENTS.ORDER_COMPLETED, updated);
@@ -122,3 +127,66 @@ ordersRouter.get('/active', async (req: Request, res: Response, next: NextFuncti
     next(error);
   }
 });
+
+/**
+ * GET /api/orders/history?date=YYYY-MM-DD
+ * Returns all served orders for the given calendar day (defaults to today).
+ * Each order is enriched with:
+ *   - prepDurationMs  : readyAt - createdAt
+ *   - cookDurationMs  : readyAt - cookingStartedAt
+ *   - totalItems      : sum of item quantities
+ */
+ordersRouter.get('/history', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const dateParam = typeof req.query['date'] === 'string' ? req.query['date'] : null;
+    const tz = 'Asia/Kolkata'; // IST — adjust per deployment region
+
+    // Build midnight-to-midnight UTC window for the requested date
+    const targetDate = dateParam ? new Date(dateParam) : new Date();
+    const startOfDay = new Date(
+      Date.UTC(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0, 0)
+    );
+    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+
+    const query: any = {
+      status:    'served',
+      createdAt: { $gte: startOfDay, $lt: endOfDay },
+    };
+
+    const orders = await OrderModel
+      .find(query)
+      .sort({ readyAt: -1 })   // newest served first
+      .lean();
+
+    // Enrich with computed metrics
+    const enriched = orders.map(o => {
+      const createdMs        = new Date(o.createdAt).getTime();
+      const readyMs          = o.readyAt   ? new Date(o.readyAt).getTime()          : null;
+      const cookingStartedMs = o.cookingStartedAt ? new Date(o.cookingStartedAt).getTime() : null;
+
+      const prepDurationMs = readyMs   ? readyMs - createdMs               : null;
+      const cookDurationMs = readyMs && cookingStartedMs ? readyMs - cookingStartedMs : null;
+      const totalItems     = o.items.reduce((sum, item) => sum + item.quantity, 0);
+      const slaBreached    = prepDurationMs !== null && prepDurationMs > 12 * 60 * 1000;
+
+      return { ...o, prepDurationMs, cookDurationMs, totalItems, slaBreached };
+    });
+
+    const totalRevenue = enriched.length; // placeholder — orders served count
+    const breachCount  = enriched.filter(o => o.slaBreached).length;
+    const avgPrepMs    = enriched.length
+      ? enriched.reduce((s, o) => s + (o.prepDurationMs ?? 0), 0) / enriched.length
+      : 0;
+
+    res.json({
+      date:      startOfDay.toISOString().slice(0, 10),
+      totalServed: enriched.length,
+      breachCount,
+      avgPrepMinutes: Math.round(avgPrepMs / 6000) / 10,
+      orders:    enriched,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+

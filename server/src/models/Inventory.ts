@@ -21,6 +21,4 @@ const InventorySchema = new Schema<IInventoryItem & Document>(
   }
 );
 
-InventorySchema.index({ ingredientName: 1 });
-
 export const InventoryModel = mongoose.model<IInventoryItem & Document>('Inventory', InventorySchema);

@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useOrders } from '../hooks/useOrders';
 import { OrderTicket } from '../components/OrderTicket';
-import { Wifi, WifiOff } from 'lucide-react';
+import { Wifi, WifiOff, Sun, Moon } from 'lucide-react';
 import { useBumpBar } from '../hooks/useBumpBar';
 import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
@@ -12,9 +12,22 @@ import type { StationFilter } from '../../../shared/types';
 export const KitchenDisplay: React.FC = () => {
   const { orders, updateStatus, isConnected, inventoryAlert } = useOrders();
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
-  const [activeStation, setActiveStation] = useState<StationFilter>('all');
+  const [activeStation, setActiveStation]     = useState<StationFilter>('all');
 
   const STATIONS: StationFilter[] = ['all', 'grill', 'fry', 'prep', 'assembly'];
+
+  // ── Theme toggle ────────────────────────────────────────────────────────
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    const saved = localStorage.getItem('kds-theme');
+    return saved ? saved === 'dark' : true; // default dark
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    localStorage.setItem('kds-theme', isDark ? 'dark' : 'light');
+  }, [isDark]);
+
+  const toggleTheme = useCallback(() => setIsDark(prev => !prev), []);
 
   // Calculate priority bucket: 2 for 13+ mins, 1 for 9-12 mins, 0 for <9 mins
   const getPriority = (createdAt: string) => {
@@ -92,6 +105,9 @@ export const KitchenDisplay: React.FC = () => {
           <Link to="/analytics" style={{ fontSize: '0.875rem', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', textDecoration: 'none' }}>
             [VIEW ANALYTICS]
           </Link>
+          <Link to="/history" style={{ fontSize: '0.875rem', fontFamily: 'var(--font-mono)', color: 'var(--status-ready)', textDecoration: 'none' }}>
+            [HISTORY]
+          </Link>
           <Link to="/order" style={{ fontSize: '0.875rem', fontFamily: 'var(--font-mono)', color: 'var(--status-received)', textDecoration: 'none' }}>
             [+ NEW ORDER]
           </Link>
@@ -121,13 +137,41 @@ export const KitchenDisplay: React.FC = () => {
           </div>
         </h1>
         
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontFamily: 'var(--font-mono)' }}>
-          {/* ── Voice Command Console ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontFamily: 'var(--font-mono)' }}>
+
+          {/* ── Voice Command Console (interactive toggle + command input) ── */}
           <VoiceCommandConsole
             orders={orders}
             updateStatus={updateStatus}
             isConnected={isConnected}
           />
+
+          {/* ── Dark / Light mode toggle ── */}
+          <button
+            onClick={toggleTheme}
+            title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              padding: '0.3rem 0.7rem',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.65rem',
+              fontWeight: 700,
+              letterSpacing: '0.07em',
+              border: '1px solid var(--border)',
+              borderRadius: '4px',
+              backgroundColor: 'var(--bg-elevated)',
+              color: isDark ? 'var(--status-amber)' : 'var(--text-primary)',
+              cursor: 'pointer',
+              transition: 'all 180ms ease',
+              flexShrink: 0,
+            }}
+          >
+            {isDark ? <Sun size={13} /> : <Moon size={13} />}
+            {isDark ? 'LIGHT' : 'DARK'}
+          </button>
+
           {/* ── Connection status ── */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
             {isConnected ? (
@@ -143,6 +187,8 @@ export const KitchenDisplay: React.FC = () => {
             )}
           </div>
         </div>
+
+
       </header>
 
       <AIPrepSummary />
