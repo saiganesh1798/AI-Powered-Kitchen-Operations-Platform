@@ -138,7 +138,9 @@ Examples
 Synonym Expansion: We added support for natural kitchen commands:
 
 Start Cooking: "cook table 5", "start order 5", "start table 5", "prepare table 5", "begin table 5", "start cooking 5"
+
 Mark as Ready: "ready table 5", "finish table 5", "mark ready 5", "completed table 5", "done table 5"
+
 Serve & Archive: "serve table 5", "clear table 5", "archive table 5", "bump table 5", "clear order 5"
 
 
